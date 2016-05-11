@@ -3,7 +3,6 @@
  * Index Mapping: Use _mapping.json files to define mapping. Script will use
  */
 var elasticsearch = require('elasticsearch');
-var config = require('../config');
 var dir = require('node-dir');
 var fs = require('fs');
 var _ = require('lodash');
@@ -11,21 +10,25 @@ var $q = require('q');
 var path = require('path');
 
 var DATA_DIR = path.resolve(__dirname, './es');
+var INDEX_NAME = 'facebook';
+var TYPE_NAME = 'nodes'
+var config = {
+	host: 'http://localhost:9200'
+}
 
 // Connecting
-console.log("Connecting to Elasticsearch @ " + config.elasticsearch.url);
-config.elasticsearch.host = config.elasticsearch.url;
-var client = new elasticsearch.Client(config.elasticsearch);
+console.log('Connecting to Elasticsearch @ ' + config.host);
+var client = new elasticsearch.Client(config);
 
 //load indexes
 function getIndexName(fileName){
-	var justFileName = _.last(fileName.split("/"));
-	var indexName = justFileName.replace("_mapping.json", "");
+	var justFileName = _.last(fileName.split('/'));
+	var indexName = justFileName.replace('_mapping.json', '');
 	return indexName;
 }
 
 function getIndexTypeName(indexName){
-	return _.last(indexName.split("_"));
+	return _.last(indexName.split('_'));
 }
 
 function deleteIndex(index){
@@ -33,7 +36,7 @@ function deleteIndex(index){
 
 	client.indices.delete({index:index}, function(err, resp){
 		if(err) deferred.reject(err);
-		console.log(index + ": deleted");
+		console.log(index + ': deleted');
 		deferred.resolve(resp);
 	});
 
@@ -58,7 +61,7 @@ function createIndex(index, type, mapping){
 			if(err){
 				deferred.reject(err);
 			}
-			console.log(index + ": mapping created.");
+			console.log(index + ': mapping created.');
 			deferred.resolve(resp);
 		});
 	return deferred.promise;
@@ -68,7 +71,11 @@ function createIndex(index, type, mapping){
 function bulkLoadData(data){
 	var deferred = $q.defer();
 
-	client.bulk({body:data}, function(err, resp){
+	client.bulk({
+		index: INDEX_NAME,
+		type: TYPE_NAME,
+		body:data
+	}, function(err, resp){
 		if(err){
 				deferred.reject(err);
 		}
@@ -87,19 +94,17 @@ function loadIndexes(){
 			match: /_mapping.json/
 		},
 		function(err, content, fileName, next){
-			var index = getIndexName(fileName);
-			var type = getIndexTypeName(index);
-			console.log("--------------------");
-			console.log("Creating index:" + index + " type:" + type);
+			console.log('--------------------');
+			console.log('Creating index:' + INDEX_NAME + ' type:' + TYPE_NAME);
 			var mapping = JSON.parse(content);
 
-			isExistsIndex(index).then(function(resp){
+			isExistsIndex(INDEX_NAME).then(function(resp){
 				if(resp){
-					return deleteIndex(index);
+					return deleteIndex(INDEX_NAME);
 				}
 			})
 			.then(function(resp){
-				return createIndex(index,type,mapping)
+				return createIndex(INDEX_NAME,TYPE_NAME,mapping)
 			})
 			.then(function(resp){
 					next();
@@ -126,11 +131,9 @@ function loadData(){
 			match: /_data.json/
 		},
 		function(err, content, fileName, next){
-			var index = getIndexName(fileName);
-			var type = getIndexTypeName(index);
-			console.log("--------------------");
-			console.log("Loading data for : index:" + index);
-			var data = content.toString().split("\n");
+			console.log('--------------------');
+			console.log('Loading data for : index:' + INDEX_NAME);
+			var data = addActionDescription(JSON.parse(content));
 			bulkLoadData(data).then(function(resp){
 				next();
 			});
@@ -145,15 +148,24 @@ function loadData(){
 	return deferred.promise;
 };
 
+function addActionDescription(jsonData) {
+	var returnThis = [];
+	jsonData.forEach(function(entry) {
+		returnThis.push({index:{}});
+		returnThis.push(entry);
+	})
+	return returnThis;
+}
+
 // Executing scripts
 
 loadIndexes()
-	.then(loadData)
-	.then(function(resp1, resp2){
-		console.log("Done");
-		process.exit(0);
-	})
-	.catch(function(err){
-		throw err;
-		process.exit(1);
-	})
+.then(loadData)
+.then(function(resp1, resp2){
+	console.log('Done');
+	process.exit(0);
+})
+.catch(function(err){
+	throw err;
+	process.exit(1);
+})
