@@ -7,11 +7,7 @@ var dir = require('node-dir');
 var fs = require('fs');
 var _ = require('lodash');
 var $q = require('q');
-var path = require('path');
 
-var DATA_DIR = path.resolve(__dirname, './es');
-var INDEX_NAME = 'facebook';
-var TYPE_NAME = 'nodes'
 var config = {
 	host: 'http://localhost:9200'
 }
@@ -43,7 +39,7 @@ function deleteIndex(index){
 	return deferred.promise;
 }
 
-function isExistsIndex(index){
+function doesIndexExist(index){
 
 	var deferred = $q.defer();
 	client.indices.exists({index: index}, function(err, resp){
@@ -55,9 +51,9 @@ function isExistsIndex(index){
 	return deferred.promise;
 }
 
-function createIndex(index, type, mapping){
+function createIndex(index, mapping){
 	var deferred = $q.defer();
-	client.indices.create({index: index, type: type, body: mapping }, function(err, resp){
+	client.indices.create({index: index, body: mapping }, function(err, resp){
 			if(err){
 				deferred.reject(err);
 			}
@@ -68,12 +64,11 @@ function createIndex(index, type, mapping){
 }
 
 
-function bulkLoadData(data){
+function bulkLoadData(data, indexName, typeName){
 	var deferred = $q.defer();
-
 	client.bulk({
-		index: INDEX_NAME,
-		type: TYPE_NAME,
+		index: indexName,
+		type: typeName,
 		body:data
 	}, function(err, resp){
 		if(err){
@@ -86,63 +81,52 @@ function bulkLoadData(data){
 	return deferred.promise;
 }
 
-function loadIndexes(){
+function loadIndexes(filePath, indexName){
 
 	var deferred = $q.defer();
-
-	dir.readFiles(DATA_DIR, {
-			match: /_mapping.json/
-		},
+  console.log('filePath', filePath);
+	fs.readFile(filePath,
 		function(err, content, fileName, next){
 			console.log('--------------------');
-			console.log('Creating index:' + INDEX_NAME + ' type:' + TYPE_NAME);
+			console.log('Creating index:' + indexName);
 			var mapping = JSON.parse(content);
 
-			isExistsIndex(INDEX_NAME).then(function(resp){
+			doesIndexExist(indexName).then(function(resp){
 				if(resp){
-					return deleteIndex(INDEX_NAME);
+					return deleteIndex(indexName);
 				}
 			})
 			.then(function(resp){
-				return createIndex(INDEX_NAME,TYPE_NAME,mapping)
+				return createIndex(indexName, mapping)
 			})
 			.then(function(resp){
-					next();
+				deferred.resolve();
 			})
 			.catch(function(err){
+				deferred.reject(err);
 				console.log(err);
 			});
-		},
-		function(err, files){
-			if(err){
-				deferred.reject(err);
-			}
-			deferred.resolve(files);
 		});
 
 	return deferred.promise;
 }
 
-function loadData(){
+function loadData(filePath, indexName, typeName){
 
 	var deferred = $q.defer();
 
-	dir.readFiles(DATA_DIR, {
-			match: /_data.json/
-		},
+	fs.readFile(filePath,
 		function(err, content, fileName, next){
 			console.log('--------------------');
-			console.log('Loading data for : index:' + INDEX_NAME);
+			console.log('Loading data for : index:' + indexName);
 			var data = addActionDescription(JSON.parse(content));
-			bulkLoadData(data).then(function(resp){
+			bulkLoadData(data, indexName, typeName).then(function(resp){
+			  deferred.resolve();
 				next();
-			});
-		},
-		function(err, files){
-			if(err){
+			})
+			.catch(err, function(err) {
 				deferred.reject(err);
-			}
-			deferred.resolve(files);
+			});
 		});
 
 	return deferred.promise;
@@ -157,15 +141,26 @@ function addActionDescription(jsonData) {
 	return returnThis;
 }
 
-// Executing scripts
+module.exports.mapping = function(mappingFilePath, indexName) {
+	loadIndexes(mappingFilePath, indexName)
+	.then(function(resp1, resp2){
+		console.log('Done');
+		process.exit(0);
+	})
+	.catch(function(err){
+		throw err;
+		process.exit(1);
+	})
+}
 
-loadIndexes()
-.then(loadData)
-.then(function(resp1, resp2){
-	console.log('Done');
-	process.exit(0);
-})
-.catch(function(err){
-	throw err;
-	process.exit(1);
-})
+module.exports.data = function(dataFilePath, indexName, typeName) {
+	loadData(dataFilePath, indexName, typeName)
+	.then(function(){
+		console.log('Done');
+		process.exit(0);
+	})
+	.catch(function(err){
+		throw err;
+		process.exit(1);
+	})
+}
