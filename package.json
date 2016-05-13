@@ -6,6 +6,10 @@
     "Jayesh Mori",
     "Sam Echikson"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samechikson/es-json-load"
+  },
   "bin": "./bin/es-json-load",
   "dependencies": {
     "elasticsearch": "^11.0.1",
