@@ -1,28 +1,36 @@
 #!/usr/bin/env node
 
-var argv        = require('minimist')(process.argv.slice(2));
-var util        = require('util');
-var esJsonLoad = require( __dirname + "/../es-json-load.js" );
+var argv = require('minimist')(process.argv.slice(2));
+var clone = require('lodash').clone;
+var esJSONLoad = require( __dirname + "/../es-json-load.js" );
 
 // For future developers.  If you add options here, be sure to add the option to test suite tests where necessary
 var defaults = {
-  host:           'http://localhost:9200'
+  host: 'http://localhost:9200'
 };
 
-var options = {};
+var options = clone(defaults);
 
-for(var i in argv){
+for (var i in argv) {
   options[i] = argv[i];
-  if(defaults[i]){
-    options[i] = argv[i];
-  }
   if(options[i] === 'true' ){ options[i] = true; }
   if(options[i] === 'false'){ options[i] = false; }
 }
 
+var loader = new esJSONLoad(options.host);
+var result;
 // Check whether loading a mapping or indexing data.
-if(options.mapping === true){
-  esJsonLoad.mapping(options.file, options.index);
+if (options.mapping === true) {
+  result = loader.loadMapping(options.file, options.index);
 } else if (options.data === true){
-  esJsonLoad.data(options.file, options.index, options.type);
+  result = loader.loadData(options.file, options.index, options.type);
 }
+
+result.then(function () {
+	console.log('Done');
+	process.exit(0);
+})
+.catch(function(err) {
+	throw err;
+	process.exit(1);
+})
